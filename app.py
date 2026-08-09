@@ -259,8 +259,8 @@ model_data = data.dropna().copy()
 
 if len(model_data) < 150:
     st.error(
-        "Training ke liye historical data kam hai. "
-        "Period ko 1y ya 2y karo."
+        "There is insufficient historical data for training."
+"Change the period to 1 or 2."
     )
     st.stop()
 
@@ -448,8 +448,7 @@ st.subheader("Latest News Sentiment")
 
 if news_df.empty:
     st.info(
-        "Is symbol ke liye news available nahi mili."
-    )
+"No news was found for this symbol."    )
 else:
 
     st.dataframe(
@@ -483,8 +482,9 @@ with i4:
 
 
 st.warning(
-    "Ye experimental educational model hai. "
-    "News sentiment current headlines ka signal hai, "
-    "historical guarantee nahi. Real money se trade karne se pehle "
-    "paper trading aur proper backtesting karo."
+    "This is experimental educational model. "
+    "News sentiment signals the current headlines, "
+"not a guarantee based on history. Before trading with real money, "
+"engage in paper trading and proper backtesting."
+ "Thank You"
 )
