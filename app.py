@@ -486,5 +486,5 @@ st.warning(
     "News sentiment signals the current headlines, "
 "not a guarantee based on history. Before trading with real money, "
 "engage in paper trading and proper backtesting."
- "Thank You"
+ " Thank You. "
 )
