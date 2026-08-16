@@ -14,6 +14,8 @@ from sklearn.metrics import accuracy_score
 
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
+from streamlit_autorefresh import st_autorefresh
+
 
 st.set_page_config(
     page_title="AI Market & Sentiment Predictor",
