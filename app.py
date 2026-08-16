@@ -97,8 +97,11 @@ threshold = st.sidebar.slider(
 )
 
 @st.cache_data(ttl=300)
-def download_data(symbol, interval, selected_period):
-
+data = download_data(
+    symbol,
+    interval,
+    period
+)
     if interval in ["5m", "15m"]:
         request_period = "60d"
     else:
@@ -287,9 +290,6 @@ def get_sentiment(news):
 
     return average_score, pd.DataFrame(rows)
 
-
-data = download_data(symbol, period)
-
 if data is None:
     st.error(
         "Data nahi mila. Symbol check karo, jaise AAPL, TSLA, "
@@ -314,10 +314,6 @@ features = [
     "momentum_5",
     "volatility"
 ]
-
-data["future_return"] = (
-    data["close"].shift(-1) / data["close"] - 1
-)
 
 data["future_return"] = (
     data["close"].shift(-1) /
@@ -481,7 +477,7 @@ breakdown = pd.DataFrame(
             "Combined UP"
         ],
         "Probability": [
-            technical_up * 100,
+            up_probability * 100,
             news_up_probability * 100,
             combined_up * 100
         ]
