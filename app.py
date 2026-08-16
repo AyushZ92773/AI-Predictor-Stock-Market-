@@ -10,7 +10,7 @@ from ta.volatility import AverageTrueRange
 
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, classification_report
 
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
@@ -21,6 +21,11 @@ st.set_page_config(
     page_title="AI Market & Sentiment Predictor",
     page_icon="📈",
     layout="centered"
+) 
+
+st_autorefresh(
+    interval=300000,
+    key="market_refresh"
 )
 
 st.title("🤖 AI Market & Sentiment Predictor")
@@ -29,12 +34,58 @@ st.caption(
     "not guaranteed investment advice."
 )
 
+market = st.sidebar.selectbox(
+    "Market",
+    [
+        "Indian NSE",
+        "Indian BSE",
+        "US Market"
+    ]
+)
 
-symbol = st.sidebar.text_input("Stock/Crypto Symbol", "AAPL").upper().strip()
+if market == "Indian NSE":
+
+    user_symbol = st.sidebar.text_input(
+        "NSE Symbol",
+        "RELIANCE"
+    ).upper().strip()
+
+    symbol = user_symbol + ".NS"
+
+elif market == "Indian BSE":
+
+    user_symbol = st.sidebar.text_input(
+        "BSE Symbol",
+        "RELIANCE"
+    ).upper().strip()
+
+    symbol = user_symbol + ".BO"
+
+else:
+
+    symbol = st.sidebar.text_input(
+        "US Symbol",
+        "AAPL"
+    ).upper().strip()
+
+st.sidebar.info(
+    f"Using symbol: {symbol}"
+)
+
 
 period = st.sidebar.selectbox(
     "Historical Period",
     ["6mo", "1y", "2y", "5y"]
+)
+
+interval = st.sidebar.selectbox(
+    "Prediction Timeframe",
+    [
+        "5m",
+        "15m",
+        "1d"
+    ],
+    index=1
 )
 
 threshold = st.sidebar.slider(
@@ -45,14 +96,24 @@ threshold = st.sidebar.slider(
     0.01
 )
 
+data = download_data(symbol, interval)
 
 @st.cache_data(ttl=900)
-def download_data(symbol, period):
+
+@st.cache_data(ttl=300)
+def download_data(symbol, interval):
+
+    if interval == "5m":
+        period = "60d"
+    elif interval == "15m":
+        period = "60d"
+    else:
+        period = "2y"
 
     data = yf.download(
         symbol,
         period=period,
-        interval="1d",
+        interval=interval,
         auto_adjust=False,
         progress=False
     )
@@ -73,7 +134,13 @@ def download_data(symbol, period):
         }
     )
 
-    required = ["open", "high", "low", "close", "volume"]
+    required = [
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume"
+    ]
 
     missing = [
         column for column in required
@@ -84,7 +151,6 @@ def download_data(symbol, period):
         return None
 
     return data[required].dropna()
-
 
 @st.cache_data(ttl=900)
 def get_news(symbol):
@@ -253,9 +319,25 @@ data["future_return"] = (
     data["close"].shift(-1) / data["close"] - 1
 )
 
-data["target"] = (
-    data["future_return"] > 0
-).astype(int)
+data["future_return"] = (
+    data["close"].shift(-1) /
+    data["close"] - 1
+)
+
+up_limit = 0.0015
+down_limit = -0.0015
+
+data["target"] = np.select(
+    [
+        data["future_return"] > up_limit,
+        data["future_return"] < down_limit
+    ],
+    [
+        1,
+        0
+    ],
+    default=2
+)
 
 model_data = data.dropna().copy()
 
@@ -269,11 +351,11 @@ if len(model_data) < 150:
 
 split = int(len(model_data) * 0.80)
 
-X = model_data[features]
-y = model_data["target"]
-
 X_train = X.iloc[:split]
 X_test = X.iloc[split:]
+
+y_train = y.iloc[:split]
+y_test = y.iloc[split:]
 
 y_train = y.iloc[:split]
 y_test = y.iloc[split:]
@@ -306,24 +388,26 @@ latest_x = scaler.transform(
     )
 )
 
-technical_probabilities = model.predict_proba(
-    latest_x
+probabilities = model.predict_proba(
+    latest_scaled
 )[0]
 
-technical_down = technical_probabilities[0]
-technical_up = technical_probabilities[1]
+class_probabilities = dict(
+    zip(model.classes_, probabilities)
+)
 
+down_probability = class_probabilities.get(0, 0)
+up_probability = class_probabilities.get(1, 0)
+neutral_probability = class_probabilities.get(2, 0)
 
-news = get_news(symbol)
-news_score, news_df = get_sentiment(news)
+if up_probability >= threshold:
+    prediction = "🟢 UP"
 
-if news_score > 0.05:
-    news_label = "🟢 Positive"
-elif news_score < -0.05:
-    news_label = "🔴 Negative"
+elif down_probability >= threshold:
+    prediction = "🔴 DOWN"
+
 else:
-    news_label = "⚪ Neutral"
-
+    prediction = "⚪ NEUTRAL"
 
 news_up_probability = 0.50 + (news_score * 0.35)
 news_up_probability = float(
@@ -347,40 +431,42 @@ else:
 
 st.subheader("Prediction")
 
-c1, c2 = st.columns(2)
+st.info(
+    f"Market: {market} | Symbol: {symbol} | "
+    f"Timeframe: {interval} | Auto-refresh: 5 minutes"
+)
 
-with c1:
+col1, col2, col3, col4, col5 = st.columns(5)
+
+with col1:
     st.metric(
         "Current Price",
         f"{latest['close']:.2f}"
     )
 
-with c2:
+with col2:
     st.metric(
-        "Final Signal",
-        final_signal
+        "Signal",
+        prediction
     )
 
-c3, c4, c5 = st.columns(3)
-
-with c3:
+with col3:
     st.metric(
-        "Technical UP",
-        f"{technical_up * 100:.1f}%"
+        "UP Probability",
+        f"{up_probability * 100:.1f}%"
     )
 
-with c4:
+with col4:
     st.metric(
-        "News Sentiment",
-        news_label
+        "DOWN Probability",
+        f"{down_probability * 100:.1f}%"
     )
 
-with c5:
+with col5:
     st.metric(
-        "Model Accuracy",
-        f"{accuracy * 100:.1f}%"
+        "NEUTRAL Probability",
+        f"{neutral_probability * 100:.1f}%"
     )
-
 
 st.subheader("Signal Breakdown")
 
