@@ -96,23 +96,17 @@ threshold = st.sidebar.slider(
     0.01
 )
 
-data = download_data(symbol, interval)
-
-@st.cache_data(ttl=900)
-
 @st.cache_data(ttl=300)
-def download_data(symbol, interval):
+def download_data(symbol, interval, selected_period):
 
-    if interval == "5m":
-        period = "60d"
-    elif interval == "15m":
-        period = "60d"
+    if interval in ["5m", "15m"]:
+        request_period = "60d"
     else:
-        period = "2y"
+        request_period = selected_period
 
     data = yf.download(
         symbol,
-        period=period,
+        period=request_period,
         interval=interval,
         auto_adjust=False,
         progress=False
@@ -151,6 +145,12 @@ def download_data(symbol, interval):
         return None
 
     return data[required].dropna()
+
+data = download_data(
+    symbol,
+    interval,
+    period
+)
 
 @st.cache_data(ttl=900)
 def get_news(symbol):
@@ -343,19 +343,18 @@ model_data = data.dropna().copy()
 
 if len(model_data) < 150:
     st.error(
-        "There is insufficient historical data for training."
-"Change the period to 1 or 2."
+        "There is insufficient historical data for training. "
+        "Change the timeframe or period."
     )
     st.stop()
 
+X = model_data[features]
+y = model_data["target"]
 
 split = int(len(model_data) * 0.80)
 
 X_train = X.iloc[:split]
 X_test = X.iloc[split:]
-
-y_train = y.iloc[:split]
-y_test = y.iloc[split:]
 
 y_train = y.iloc[:split]
 y_test = y.iloc[split:]
@@ -389,7 +388,7 @@ latest_x = scaler.transform(
 )
 
 probabilities = model.predict_proba(
-    latest_scaled
+    latest_x
 )[0]
 
 class_probabilities = dict(
@@ -402,20 +401,24 @@ neutral_probability = class_probabilities.get(2, 0)
 
 if up_probability >= threshold:
     prediction = "🟢 UP"
-
 elif down_probability >= threshold:
     prediction = "🔴 DOWN"
-
 else:
     prediction = "⚪ NEUTRAL"
 
-news_up_probability = 0.50 + (news_score * 0.35)
+news = get_news(symbol)
+news_score, news_df = get_sentiment(news)
+
+news_up_probability = 0.50 + (
+    news_score * 0.35
+)
+
 news_up_probability = float(
     np.clip(news_up_probability, 0.05, 0.95)
 )
 
 combined_up = (
-    technical_up * 0.70
+    up_probability * 0.70
     + news_up_probability * 0.30
 )
 
@@ -447,7 +450,7 @@ with col1:
 with col2:
     st.metric(
         "Signal",
-        prediction
+        final_signal
     )
 
 with col3:
